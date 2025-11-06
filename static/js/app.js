@@ -543,18 +543,20 @@ function renderVisualization(data) {
   ctx.restore();
 
   layout.positions.forEach((entry) => {
-    ctx.save();
-    const gradient = ctx.createLinearGradient(entry.x, 20, entry.x, height - 20);
-    gradient.addColorStop(0, "rgba(105, 210, 255, 0)");
-    gradient.addColorStop(0.5, "rgba(105, 210, 255, 0.7)");
-    gradient.addColorStop(1, "rgba(105, 210, 255, 0)");
-    ctx.strokeStyle = gradient;
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(entry.x, 20);
-    ctx.lineTo(entry.x, height - 20);
-    ctx.stroke();
-    ctx.restore();
+    if (entry.component.type !== "free_space") {
+      ctx.save();
+      const gradient = ctx.createLinearGradient(entry.x, 20, entry.x, height - 20);
+      gradient.addColorStop(0, "rgba(105, 210, 255, 0)");
+      gradient.addColorStop(0.5, "rgba(105, 210, 255, 0.7)");
+      gradient.addColorStop(1, "rgba(105, 210, 255, 0)");
+      ctx.strokeStyle = gradient;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(entry.x, 20);
+      ctx.lineTo(entry.x, height - 20);
+      ctx.stroke();
+      ctx.restore();
+    }
 
     ctx.save();
     ctx.fillStyle = "rgba(240, 246, 255, 0.65)";
@@ -676,8 +678,8 @@ function computeComponentLayout(width, margin) {
     const entry = { component, index, distance: cumulativeDistance };
     if (component.type === "free_space") {
       const length = Math.max(Number(component.params.length) || 0, 0);
-      entry.distance = cumulativeDistance + length / 2;
       cumulativeDistance += length;
+      entry.distance = cumulativeDistance;
     }
     return entry;
   });
@@ -692,7 +694,7 @@ function computeComponentLayout(width, margin) {
 
   const stackMap = new Map();
   positions.forEach((entry) => {
-    const key = entry.x.toFixed(2);
+    const key = entry.distance.toFixed(6);
     const stack = stackMap.get(key);
     if (stack) {
       entry.stackIndex = stack.length;
@@ -704,12 +706,20 @@ function computeComponentLayout(width, margin) {
   });
 
   stackMap.forEach((stack) => {
-    stack.forEach((entry) => {
-      entry.stackSize = stack.length;
+    const stackSize = stack.length;
+    const adjacencySpacing = stackSize > 1 ? clamp(span * 0.01, 4, 12) : 0;
+    stack.forEach((entry, stackIndex) => {
+      entry.stackSize = stackSize;
+      entry.stackIndex = stackIndex;
+      if (stackSize > 1) {
+        const offset = (stackIndex - (stackSize - 1) / 2) * adjacencySpacing;
+        entry.x = clamp(entry.x + offset, startX, endX);
+      }
     });
   });
 
-  return { startX, endX, positions };
+  const maxPositionX = positions.reduce((maxValue, entry) => Math.max(maxValue, entry.x), startX);
+  return { startX, endX: Math.max(endX, maxPositionX), positions };
 }
 
 function formatComponentParams(params) {

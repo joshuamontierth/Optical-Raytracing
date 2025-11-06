@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+import math
+
+from dataclasses import asdict, dataclass
 from typing import Dict, List
 
 from flask import Flask, jsonify, render_template, request
@@ -48,9 +50,9 @@ COMPONENT_LIBRARY: Dict[str, ComponentDefinition] = {
     ),
     "grating": ComponentDefinition(
         label="Diffraction Grating",
-        description="Grating providing an angular deviation (degrees).",
+        description="Grating described by spatial frequency (lines/mm); renders first-order diffraction.",
         parameters={
-            "angle_offset": {"default": 5.0, "min": -60.0, "max": 60.0, "step": 0.1},
+            "spatial_frequency": {"default": 600.0, "min": 50.0, "max": 2400.0, "step": 10.0},
         },
     ),
     "mirror": ComponentDefinition(
@@ -154,8 +156,14 @@ def calculate_matrix(component_type: str, params: Dict[str, float]):
         return [[1.0, 0.0], [0.0, 1.0]], [0.0, angle]
 
     if component_type == "grating":
-        angle = float(params.get("angle_offset", 0.0))
-        return [[1.0, 0.0], [0.0, 1.0]], [0.0, angle]
+        spatial_frequency = float(params.get("spatial_frequency", 600.0))
+        spatial_frequency = max(spatial_frequency, 0.0)
+        wavelength_mm = 0.00055  # 550 nm representative wavelength
+        argument = spatial_frequency * wavelength_mm
+        argument = max(min(argument, 1.0), -1.0)
+        angle_rad = math.asin(argument)  # First-order diffraction (m = 1)
+        angle_deg = math.degrees(angle_rad)
+        return [[1.0, 0.0], [0.0, 1.0]], [0.0, angle_deg]
 
     if component_type == "mirror":
         orientation = float(params.get("flip_orientation", 1.0))
