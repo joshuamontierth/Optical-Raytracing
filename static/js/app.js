@@ -542,6 +542,53 @@ function renderVisualization(data) {
   ctx.stroke();
   ctx.restore();
 
+  const labelFont = "12px 'Segoe UI', sans-serif";
+  const labelEntries = layout.positions.filter(
+    (entry) => entry.component.type !== "free_space",
+  );
+
+  ctx.save();
+  ctx.font = labelFont;
+  const measuredLabels = labelEntries
+    .map((entry) => {
+      const text = componentLibrary[entry.component.type]?.label ?? "Component";
+      const width = ctx.measureText(text).width;
+      entry.labelText = text;
+      entry.labelWidth = width;
+      return entry;
+    })
+    .sort((a, b) => a.x - b.x);
+
+  const spacingBuffer = 6;
+  let currentCluster = [];
+  const flushCluster = () => {
+    if (!currentCluster.length) return;
+    const size = currentCluster.length;
+    currentCluster.forEach((clusterEntry, index) => {
+      clusterEntry.labelGroupSize = size;
+      clusterEntry.labelGroupIndex = index;
+    });
+    currentCluster = [];
+  };
+
+  measuredLabels.forEach((entry) => {
+    if (!currentCluster.length) {
+      currentCluster.push(entry);
+      return;
+    }
+    const previous = currentCluster[currentCluster.length - 1];
+    const overlapThreshold =
+      (previous.labelWidth + entry.labelWidth) / 2 + spacingBuffer;
+    if (entry.x - previous.x < overlapThreshold) {
+      currentCluster.push(entry);
+    } else {
+      flushCluster();
+      currentCluster.push(entry);
+    }
+  });
+  flushCluster();
+  ctx.restore();
+
   layout.positions.forEach((entry) => {
     if (entry.component.type !== "free_space") {
       ctx.save();
@@ -556,24 +603,33 @@ function renderVisualization(data) {
       ctx.lineTo(entry.x, height - 20);
       ctx.stroke();
       ctx.restore();
-    }
 
-    ctx.save();
-    ctx.fillStyle = "rgba(240, 246, 255, 0.65)";
-    ctx.font = "12px 'Segoe UI', sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "alphabetic";
-    const stackSize = entry.stackSize ?? 1;
-    const stackIndex = entry.stackIndex ?? 0;
-    const stackSpacing = 14;
-    const stackOffset = ((stackSize - 1) * stackSpacing) / 2;
-    const labelY = height - 6 - stackOffset + stackIndex * stackSpacing;
-    ctx.fillText(
-      componentLibrary[entry.component.type]?.label ?? "Component",
-      entry.x,
-      labelY,
-    );
-    ctx.restore();
+      ctx.save();
+      ctx.fillStyle = "rgba(240, 246, 255, 0.65)";
+      ctx.font = labelFont;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "alphabetic";
+      const stackSize = entry.stackSize ?? 1;
+      const stackIndex = entry.stackIndex ?? 0;
+      const stackSpacing = 16;
+      const stackOffset =
+        stackSize > 1 ? (stackIndex - (stackSize - 1) / 2) * stackSpacing : 0;
+      const labelGroupSize = entry.labelGroupSize ?? 1;
+      const labelGroupIndex = entry.labelGroupIndex ?? 0;
+      const labelGroupSpacing = 14;
+      const labelGroupOffset =
+        labelGroupSize > 1
+          ? (labelGroupIndex - (labelGroupSize - 1) / 2) * labelGroupSpacing
+          : 0;
+      const labelBaseline = height - 28;
+      const labelY = clamp(
+        labelBaseline + stackOffset + labelGroupOffset,
+        32,
+        height - 10,
+      );
+      ctx.fillText(entry.labelText ?? "Component", entry.x, labelY);
+      ctx.restore();
+    }
   });
 
   const paths = computeRayPaths(data);
