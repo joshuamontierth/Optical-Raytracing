@@ -14,7 +14,7 @@ const visualizationCanvas = document.getElementById("ray-visualization");
 const rayLegend = document.getElementById("ray-legend");
 const clearAllButton = document.getElementById("clear-all");
 
-const DEFAULT_FREE_SPACE_LENGTH = 5;
+const DEFAULT_FREE_SPACE_LENGTH = 100;
 
 let componentSequence = [];
 let activeContextTarget = null;
