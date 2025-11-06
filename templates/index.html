@@ -36,15 +36,18 @@
       </section>
 
       <section class="workspace">
-        <h2>Optical Rail</h2>
+        <div class="workspace-header">
+          <h2>Optical Rail</h2>
+          <p class="workspace-hint">Right-click a ray to edit its initial height and angle.</p>
+        </div>
         <div id="optical-rail" class="optical-rail" tabindex="0">
           <p class="rail-placeholder">Drag components here</p>
         </div>
 
-        <section class="rays-panel">
-          <h2>Test Rays</h2>
-          <div id="ray-controls" class="ray-controls"></div>
-        </section>
+        <div class="visualization-panel">
+          <canvas id="ray-visualization" class="ray-visualization" height="260"></canvas>
+          <div id="ray-legend" class="ray-legend"></div>
+        </div>
       </section>
     </main>
 
@@ -61,6 +64,10 @@
       <button type="button" data-action="remove">Remove</button>
     </div>
 
+    <div id="ray-context-menu" class="context-menu hidden">
+      <button type="button" data-action="configure-ray">Configure Ray</button>
+    </div>
+
     <div id="modal-backdrop" class="modal-backdrop hidden">
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <div class="modal-header">
@@ -74,20 +81,6 @@
         </div>
       </div>
     </div>
-
-    <template id="ray-control-template">
-      <div class="ray-control" data-ray-index="">
-        <h3></h3>
-        <label>
-          Height (mm)
-          <input type="number" name="height" step="0.1" />
-        </label>
-        <label>
-          Angle (mrad)
-          <input type="number" name="angle" step="0.1" />
-        </label>
-      </div>
-    </template>
 
     <template id="component-template">
       <div class="rail-component" data-id="">
