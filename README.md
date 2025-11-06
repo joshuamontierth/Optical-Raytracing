@@ -31,7 +31,3 @@ The interface is available at <http://127.0.0.1:5000/>.
 - Drag components from the toolbox into the rail and reorder them as needed.
 - Right-click a component or ray legend entry to configure or remove it.
 - Use **Clear All** to quickly reset the workspace and start a new design.
-
-## Testing
-
-Automated tests are not yet included; interact with the running app to validate changes.
