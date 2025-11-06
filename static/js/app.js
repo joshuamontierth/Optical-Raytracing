@@ -12,6 +12,7 @@ const modalClose = document.getElementById("modal-close");
 const modalCancel = document.getElementById("modal-cancel");
 const visualizationCanvas = document.getElementById("ray-visualization");
 const rayLegend = document.getElementById("ray-legend");
+const clearAllButton = document.getElementById("clear-all");
 
 let componentSequence = [];
 let activeContextTarget = null;
@@ -33,6 +34,9 @@ function init() {
   setupRailDropTarget();
   renderRayLegend();
   updateOutputs();
+  if (clearAllButton) {
+    clearAllButton.addEventListener("click", handleClearAll);
+  }
   window.addEventListener("click", () => {
     hideContextMenu();
     hideRayContextMenu();
@@ -50,6 +54,24 @@ function init() {
       renderVisualization(lastTraceResult);
     }
   });
+}
+
+function resetRaysToDefault() {
+  rayState.length = 0;
+  defaultRays.forEach((ray) => {
+    rayState.push({ ...ray });
+  });
+}
+
+function handleClearAll() {
+  hideContextMenu();
+  hideRayContextMenu();
+  componentSequence = [];
+  opticalRail.querySelectorAll(".rail-component").forEach((element) => element.remove());
+  resetRaysToDefault();
+  refreshRailPlaceholder();
+  lastTraceResult = null;
+  updateOutputs();
 }
 
 function bindLibraryDrag() {
