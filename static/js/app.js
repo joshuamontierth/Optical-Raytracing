@@ -611,19 +611,22 @@ function renderVisualization(data) {
       ctx.textBaseline = "alphabetic";
       const stackSize = entry.stackSize ?? 1;
       const stackIndex = entry.stackIndex ?? 0;
-      const stackSpacing = 14;
-      const stackOffset = ((stackSize - 1) * stackSpacing) / 2;
+      const stackSpacing = 16;
+      const stackOffset =
+        stackSize > 1 ? (stackIndex - (stackSize - 1) / 2) * stackSpacing : 0;
       const labelGroupSize = entry.labelGroupSize ?? 1;
       const labelGroupIndex = entry.labelGroupIndex ?? 0;
-      const labelGroupSpacing = 12;
-      const labelGroupOffset = ((labelGroupSize - 1) * labelGroupSpacing) / 2;
-      const labelY =
-        height -
-        6 -
-        stackOffset -
-        labelGroupOffset +
-        stackIndex * stackSpacing +
-        labelGroupIndex * labelGroupSpacing;
+      const labelGroupSpacing = 14;
+      const labelGroupOffset =
+        labelGroupSize > 1
+          ? (labelGroupIndex - (labelGroupSize - 1) / 2) * labelGroupSpacing
+          : 0;
+      const labelBaseline = height - 28;
+      const labelY = clamp(
+        labelBaseline + stackOffset + labelGroupOffset,
+        32,
+        height - 10,
+      );
       ctx.fillText(entry.labelText ?? "Component", entry.x, labelY);
       ctx.restore();
     }
