@@ -21,7 +21,7 @@ A Flask-powered interface for experimenting with paraxial ray tracing using ABCD
 ## Run
 
 ```bash
-flask --app app run
+python3 app.py
 ```
 
 The interface is available at <http://127.0.0.1:5000/>.
