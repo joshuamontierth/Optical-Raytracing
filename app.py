@@ -46,6 +46,7 @@ COMPONENT_LIBRARY: Dict[str, ComponentDefinition] = {
         description="Prism introducing an angular deviation.",
         parameters={
             "angle_offset": {"default": 2.0, "min": -30.0, "max": 30.0, "step": 0.1},
+            "thickness": {"default": 20.0, "min": 0.0, "max": 500.0, "step": 1.0},
         },
     ),
     "grating": ComponentDefinition(
@@ -152,18 +153,12 @@ def calculate_matrix(component_type: str, params: Dict[str, float]):
         return [[1.0, 0.0], [-1.0 / focal, 1.0]], [0.0, 0.0]
 
     if component_type == "prism":
-        angle = float(params.get("angle_offset", 0.0))
-        return [[1.0, 0.0], [0.0, 1.0]], [0.0, angle]
+        matrix, offset = calculate_prism_transform(params)
+        return matrix, offset
 
     if component_type == "grating":
-        spatial_frequency = float(params.get("spatial_frequency", 600.0))
-        spatial_frequency = max(spatial_frequency, 0.0)
-        wavelength_mm = 0.00055  # 550 nm representative wavelength
-        argument = spatial_frequency * wavelength_mm
-        argument = max(min(argument, 1.0), -1.0)
-        angle_rad = math.asin(argument)  # First-order diffraction (m = 1)
-        angle_deg = math.degrees(angle_rad)
-        return [[1.0, 0.0], [0.0, 1.0]], [0.0, angle_deg]
+        matrix, offset = calculate_grating_transform(params)
+        return matrix, offset
 
     if component_type == "mirror":
         orientation = float(params.get("flip_orientation", 1.0))
@@ -198,6 +193,55 @@ def apply_component(matrix: List[List[float]], offset: List[float], vec: List[fl
     height = matrix[0][0] * vec[0] + matrix[0][1] * vec[1] + offset[0]
     angle = matrix[1][0] * vec[0] + matrix[1][1] * vec[1] + offset[1]
     return [height, angle]
+
+
+def calculate_prism_transform(params: Dict[str, float]):
+    """Build the ABCD matrix for a thin prism with a finite thickness."""
+
+    n_air = 1.0
+    n_prism = 1.5
+    apex_angle = float(params.get("angle_offset", 0.0))
+    thickness = max(float(params.get("thickness", 20.0)), 0.0)
+
+    entry_D = n_air / n_prism
+    entry_matrix = [[1.0, 0.0], [0.0, entry_D]]
+    entry_offset = [0.0, (-apex_angle / 2.0) * (1.0 - entry_D)]
+
+    propagation_matrix = [[1.0, thickness / n_prism], [0.0, 1.0]]
+    propagation_offset = [0.0, 0.0]
+
+    exit_D = n_prism / n_air
+    exit_matrix = [[1.0, 0.0], [0.0, exit_D]]
+    exit_offset = [0.0, (apex_angle / 2.0) * (1.0 - exit_D)]
+
+    matrix = entry_matrix
+    offset = entry_offset
+    matrix = multiply_matrices(propagation_matrix, matrix)
+    offset = combine_offsets(propagation_matrix, offset, propagation_offset)
+    matrix = multiply_matrices(exit_matrix, matrix)
+    offset = combine_offsets(exit_matrix, offset, exit_offset)
+
+    matrix[1][0] = 0.0
+    offset[0] = 0.0
+
+    return matrix, offset
+
+
+def calculate_grating_transform(params: Dict[str, float]):
+    """Build the ABCD matrix for a diffraction grating."""
+
+    spatial_frequency = float(params.get("spatial_frequency", 600.0))
+    spatial_frequency = max(spatial_frequency, 0.0)
+    wavelength_mm = 0.00055  # 550 nm representative wavelength
+    argument = spatial_frequency * wavelength_mm
+    argument = max(min(argument, 1.0), -1.0)
+
+    angle_rad = math.asin(argument)  # First-order diffraction (m = 1)
+    angle_deg = math.degrees(angle_rad)
+    cos_out = max(math.cos(angle_rad), 1e-6)
+    angular_magnification = min(1.0 / cos_out, 10.0)
+
+    return [[1.0, 0.0], [0.0, angular_magnification]], [0.0, angle_deg]
 
 
 if __name__ == "__main__":
