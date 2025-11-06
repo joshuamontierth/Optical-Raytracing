@@ -560,7 +560,17 @@ function renderVisualization(data) {
     ctx.fillStyle = "rgba(240, 246, 255, 0.65)";
     ctx.font = "12px 'Segoe UI', sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(componentLibrary[entry.component.type]?.label ?? "Component", entry.x, height - 6);
+    ctx.textBaseline = "alphabetic";
+    const stackSize = entry.stackSize ?? 1;
+    const stackIndex = entry.stackIndex ?? 0;
+    const stackSpacing = 14;
+    const stackOffset = ((stackSize - 1) * stackSpacing) / 2;
+    const labelY = height - 6 - stackOffset + stackIndex * stackSpacing;
+    ctx.fillText(
+      componentLibrary[entry.component.type]?.label ?? "Component",
+      entry.x,
+      labelY,
+    );
     ctx.restore();
   });
 
@@ -652,35 +662,54 @@ function applyComponentTransform(matrix, offset, vec) {
 
 function computeComponentLayout(width, margin) {
   const startX = Math.max(margin, 24);
-  const endCandidate = Math.max(startX + 80, width - margin);
-  const maxEnd = width - 20;
-  const endX = Math.max(startX + 40, Math.min(endCandidate, maxEnd));
-  const span = Math.max(endX - startX, 40);
-  const weights = componentSequence.map(getComponentWeight);
-  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  const maxAxisEnd = Math.min(width - margin * 0.5, width - 20);
+  const tentativeEnd = Math.max(startX + 40, maxAxisEnd);
+  const endX = Math.min(tentativeEnd, width - 20);
+  const span = Math.max(endX - startX, 1);
 
-  if (!componentSequence.length || totalWeight === 0 || span <= 0) {
+  if (!componentSequence.length) {
     return { startX, endX, positions: [] };
   }
 
-  let accumulated = 0;
-  const positions = componentSequence.map((component, index) => {
-    const weight = weights[index];
-    const centerRatio = (accumulated + weight / 2) / totalWeight;
-    accumulated += weight;
-    const x = startX + centerRatio * span;
-    return { x, component, index };
+  let cumulativeDistance = 0;
+  const basePositions = componentSequence.map((component, index) => {
+    const entry = { component, index, distance: cumulativeDistance };
+    if (component.type === "free_space") {
+      const length = Math.max(Number(component.params.length) || 0, 0);
+      entry.distance = cumulativeDistance + length / 2;
+      cumulativeDistance += length;
+    }
+    return entry;
+  });
+
+  const totalDistance = cumulativeDistance;
+  const normalizer = totalDistance > 0 ? totalDistance : 1;
+  const positions = basePositions.map((entry) => {
+    const ratio = totalDistance > 0 ? entry.distance / normalizer : 0;
+    const x = startX + ratio * span;
+    return { ...entry, x };
+  });
+
+  const stackMap = new Map();
+  positions.forEach((entry) => {
+    const key = entry.x.toFixed(2);
+    const stack = stackMap.get(key);
+    if (stack) {
+      entry.stackIndex = stack.length;
+      stack.push(entry);
+    } else {
+      entry.stackIndex = 0;
+      stackMap.set(key, [entry]);
+    }
+  });
+
+  stackMap.forEach((stack) => {
+    stack.forEach((entry) => {
+      entry.stackSize = stack.length;
+    });
   });
 
   return { startX, endX, positions };
-}
-
-function getComponentWeight(component) {
-  if (component.type === "free_space") {
-    const length = Number(component.params.length) || 0;
-    return clamp(length / 50, 0.5, 5);
-  }
-  return 1;
 }
 
 function formatComponentParams(params) {
