@@ -30,8 +30,8 @@ body {
 }
 
 .app-layout {
-  display: grid;
-  grid-template-columns: minmax(220px, 320px) 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 1.5rem;
   padding: clamp(1rem, 5vw, 4rem);
   flex: 1;
@@ -75,8 +75,11 @@ body {
 }
 
 .component-list {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
+  align-items: stretch;
+  justify-content: center;
 }
 
 .component-card {
@@ -86,6 +89,10 @@ body {
   cursor: grab;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   border: 1px solid transparent;
+  display: grid;
+  gap: 0.35rem;
+  min-width: min(200px, 40vw);
+  flex: 1 1 180px;
 }
 
 .component-card:active {
@@ -200,6 +207,19 @@ body {
 .ray-legend__details {
   opacity: 0.7;
   font-size: 0.75rem;
+}
+
+@media (max-width: 720px) {
+  .component-list {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+  }
+
+  .component-card {
+    min-width: 200px;
+  }
 }
 
 .results-panel {
