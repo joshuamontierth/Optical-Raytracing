@@ -603,7 +603,7 @@ function renderVisualization(data) {
       entry.labelWidth = width;
       return entry;
     })
-    .sort((a, b) => a.x - b.x);
+    .sort((a, b) => a.renderX - b.renderX);
 
   const spacingBuffer = 6;
   let currentCluster = [];
@@ -625,7 +625,7 @@ function renderVisualization(data) {
     const previous = currentCluster[currentCluster.length - 1];
     const overlapThreshold =
       (previous.labelWidth + entry.labelWidth) / 2 + spacingBuffer;
-    if (entry.x - previous.x < overlapThreshold) {
+    if (entry.renderX - previous.renderX < overlapThreshold) {
       currentCluster.push(entry);
     } else {
       flushCluster();
@@ -638,15 +638,20 @@ function renderVisualization(data) {
   layout.positions.forEach((entry) => {
     if (entry.component.type !== "free_space") {
       ctx.save();
-      const gradient = ctx.createLinearGradient(entry.x, 20, entry.x, height - 20);
+      const gradient = ctx.createLinearGradient(
+        entry.renderX,
+        20,
+        entry.renderX,
+        height - 20,
+      );
       gradient.addColorStop(0, "rgba(105, 210, 255, 0)");
       gradient.addColorStop(0.5, "rgba(105, 210, 255, 0.7)");
       gradient.addColorStop(1, "rgba(105, 210, 255, 0)");
       ctx.strokeStyle = gradient;
       ctx.lineWidth = 4;
       ctx.beginPath();
-      ctx.moveTo(entry.x, 20);
-      ctx.lineTo(entry.x, height - 20);
+      ctx.moveTo(entry.renderX, 20);
+      ctx.lineTo(entry.renderX, height - 20);
       ctx.stroke();
       ctx.restore();
 
@@ -673,7 +678,7 @@ function renderVisualization(data) {
         32,
         height - 10,
       );
-      ctx.fillText(entry.labelText ?? "Component", entry.x, labelY);
+      ctx.fillText(entry.labelText ?? "Component", entry.renderX, labelY);
       ctx.restore();
     }
   });
@@ -689,9 +694,15 @@ function renderVisualization(data) {
 
   const shouldExtendPath = shouldExtendPastRail();
   const xPoints = [layout.startX];
-  layout.positions.forEach((entry) => xPoints.push(entry.x));
+  layout.positions.forEach((entry) => {
+    xPoints.push(entry.physicalX);
+  });
   if (shouldExtendPath) {
-    const trailingX = Math.min(width - margin * 0.4, layout.endX + margin * 0.6);
+    const lastX = xPoints[xPoints.length - 1] ?? layout.startX;
+    const trailingX = Math.min(
+      width - margin * 0.4,
+      Math.max(layout.endX, lastX) + margin * 0.6,
+    );
     xPoints.push(trailingX);
   }
 
@@ -741,7 +752,7 @@ function renderVisualization(data) {
       const state = states[posIndex + 1];
       if (!state) return;
       ctx.beginPath();
-      ctx.arc(entry.x, mapHeight(state.height), 2.4, 0, Math.PI * 2);
+      ctx.arc(entry.physicalX, mapHeight(state.height), 2.4, 0, Math.PI * 2);
       ctx.fill();
     });
 
@@ -802,7 +813,7 @@ function computeComponentLayout(width, margin) {
   const span = Math.max(endX - startX, 1);
 
   if (!componentSequence.length) {
-    return { startX, endX, positions: [] };
+    return { startX, endX, axisSpan: span, positions: [], totalDistance: 0 };
   }
 
   let cumulativeDistance = 0;
@@ -820,8 +831,12 @@ function computeComponentLayout(width, margin) {
   const normalizer = totalDistance > 0 ? totalDistance : 1;
   const positions = basePositions.map((entry) => {
     const ratio = totalDistance > 0 ? entry.distance / normalizer : 0;
-    const x = startX + ratio * span;
-    return { ...entry, x };
+    const physicalX = startX + ratio * span;
+    return {
+      ...entry,
+      physicalX,
+      renderX: physicalX,
+    };
   });
 
   const stackMap = new Map();
@@ -839,19 +854,13 @@ function computeComponentLayout(width, margin) {
 
   stackMap.forEach((stack) => {
     const stackSize = stack.length;
-    const adjacencySpacing = stackSize > 1 ? clamp(span * 0.01, 4, 12) : 0;
     stack.forEach((entry, stackIndex) => {
       entry.stackSize = stackSize;
       entry.stackIndex = stackIndex;
-      if (stackSize > 1) {
-        const offset = (stackIndex - (stackSize - 1) / 2) * adjacencySpacing;
-        entry.x = clamp(entry.x + offset, startX, endX);
-      }
     });
   });
 
-  const maxPositionX = positions.reduce((maxValue, entry) => Math.max(maxValue, entry.x), startX);
-  return { startX, endX: Math.max(endX, maxPositionX), positions };
+  return { startX, endX, axisSpan: span, positions, totalDistance };
 }
 
 function formatComponentParams(params) {
