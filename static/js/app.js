@@ -1,20 +1,24 @@
 const componentLibrary = window.APP_DATA.componentLibrary;
 const opticalRail = document.getElementById("optical-rail");
 const componentTemplate = document.getElementById("component-template");
-const rayTemplate = document.getElementById("ray-control-template");
-const rayControls = document.getElementById("ray-controls");
 const matrixOutput = document.getElementById("matrix-output");
 const raysOutput = document.getElementById("rays-output");
 const contextMenu = document.getElementById("context-menu");
+const rayContextMenu = document.getElementById("ray-context-menu");
 const modalBackdrop = document.getElementById("modal-backdrop");
 const modalForm = document.getElementById("modal-form");
 const modalTitle = document.getElementById("modal-title");
 const modalClose = document.getElementById("modal-close");
 const modalCancel = document.getElementById("modal-cancel");
+const visualizationCanvas = document.getElementById("ray-visualization");
+const rayLegend = document.getElementById("ray-legend");
 
 let componentSequence = [];
 let activeContextTarget = null;
 let activeModalComponentId = null;
+let activeRayIndex = null;
+let modalMode = null;
+let lastTraceResult = null;
 
 const defaultRays = [
   { label: "Ray A", height: 0, angle: 0 },
@@ -27,13 +31,23 @@ const rayState = defaultRays.map((ray) => ({ ...ray }));
 function init() {
   bindLibraryDrag();
   setupRailDropTarget();
-  buildRayControls();
+  renderRayLegend();
   updateOutputs();
-  window.addEventListener("click", () => hideContextMenu());
+  window.addEventListener("click", () => {
+    hideContextMenu();
+    hideRayContextMenu();
+  });
   window.addEventListener("keydown", (evt) => {
     if (evt.key === "Escape") {
       hideContextMenu();
+      hideRayContextMenu();
       hideModal();
+    }
+  });
+
+  window.addEventListener("resize", () => {
+    if (lastTraceResult) {
+      renderVisualization(lastTraceResult);
     }
   });
 }
@@ -76,6 +90,7 @@ function setupRailDropTarget() {
 }
 
 function showContextMenu(x, y) {
+  hideRayContextMenu();
   contextMenu.style.left = `${x}px`;
   contextMenu.style.top = `${y}px`;
   contextMenu.classList.remove("hidden");
@@ -84,6 +99,21 @@ function showContextMenu(x, y) {
 function hideContextMenu() {
   contextMenu.classList.add("hidden");
   activeContextTarget = null;
+}
+
+function showRayContextMenu(x, y, index) {
+  hideContextMenu();
+  activeRayIndex = index;
+  rayContextMenu.style.left = `${x}px`;
+  rayContextMenu.style.top = `${y}px`;
+  rayContextMenu.classList.remove("hidden");
+}
+
+function hideRayContextMenu() {
+  rayContextMenu.classList.add("hidden");
+  if (modalMode !== "ray") {
+    activeRayIndex = null;
+  }
 }
 
 contextMenu.addEventListener("click", (evt) => {
@@ -103,6 +133,15 @@ contextMenu.addEventListener("click", (evt) => {
   }
 
   hideContextMenu();
+});
+
+rayContextMenu.addEventListener("click", (evt) => {
+  const action = evt.target.dataset.action;
+  if (!action || activeRayIndex === null) return;
+  if (action === "configure-ray") {
+    openRayModal(activeRayIndex);
+  }
+  hideRayContextMenu();
 });
 
 function addComponentToRail(type) {
@@ -193,35 +232,10 @@ function refreshRailPlaceholder() {
   }
 }
 
-function buildRayControls() {
-  rayControls.innerHTML = "";
-  rayState.forEach((ray, index) => {
-    const fragment = rayTemplate.content.cloneNode(true);
-    const control = fragment.querySelector(".ray-control");
-    control.dataset.rayIndex = index;
-    control.querySelector("h3").textContent = ray.label;
-    const heightInput = control.querySelector('input[name="height"]');
-    const angleInput = control.querySelector('input[name="angle"]');
-
-    heightInput.value = ray.height;
-    angleInput.value = ray.angle;
-
-    heightInput.addEventListener("input", () => {
-      rayState[index].height = Number(heightInput.value);
-      updateOutputs();
-    });
-
-    angleInput.addEventListener("input", () => {
-      rayState[index].angle = Number(angleInput.value);
-      updateOutputs();
-    });
-
-    rayControls.appendChild(fragment);
-  });
-}
-
 function openComponentModal(component) {
+  hideRayContextMenu();
   activeModalComponentId = component.id;
+  modalMode = "component";
   modalTitle.textContent = `Configure ${componentLibrary[component.type].label}`;
   modalForm.innerHTML = "";
 
@@ -244,16 +258,57 @@ function openComponentModal(component) {
   showModal();
 }
 
+function openRayModal(index) {
+  hideContextMenu();
+  modalMode = "ray";
+  activeRayIndex = index;
+  const ray = rayState[index];
+  modalTitle.textContent = `Configure ${ray.label}`;
+  modalForm.innerHTML = "";
+
+  const heightLabel = document.createElement("label");
+  heightLabel.textContent = "Height (mm)";
+  const heightInput = document.createElement("input");
+  heightInput.type = "number";
+  heightInput.step = "0.1";
+  heightInput.name = "height";
+  heightInput.value = ray.height;
+  heightLabel.appendChild(heightInput);
+  modalForm.appendChild(heightLabel);
+
+  const angleLabel = document.createElement("label");
+  angleLabel.textContent = "Angle (mrad)";
+  const angleInput = document.createElement("input");
+  angleInput.type = "number";
+  angleInput.step = "0.1";
+  angleInput.name = "angle";
+  angleInput.value = ray.angle;
+  angleLabel.appendChild(angleInput);
+  modalForm.appendChild(angleLabel);
+
+  showModal();
+}
+
 modalForm.addEventListener("submit", (evt) => {
   evt.preventDefault();
-  if (!activeModalComponentId) return;
   const formData = new FormData(modalForm);
-  const component = componentSequence.find((c) => c.id === activeModalComponentId);
-  if (!component) return;
-  formData.forEach((value, key) => {
-    component.params[key] = Number(value);
-  });
-  updateOutputs();
+
+  if (modalMode === "component" && activeModalComponentId) {
+    const component = componentSequence.find((c) => c.id === activeModalComponentId);
+    if (!component) return;
+    formData.forEach((value, key) => {
+      component.params[key] = Number(value);
+    });
+    updateOutputs();
+  } else if (modalMode === "ray" && activeRayIndex !== null) {
+    const height = Number(formData.get("height"));
+    const angle = Number(formData.get("angle"));
+    if (!Number.isFinite(height) || !Number.isFinite(angle)) return;
+    rayState[activeRayIndex].height = height;
+    rayState[activeRayIndex].angle = angle;
+    renderRayLegend();
+    updateOutputs();
+  }
   hideModal();
 });
 
@@ -267,9 +322,12 @@ function showModal() {
 function hideModal() {
   modalBackdrop.classList.add("hidden");
   activeModalComponentId = null;
+  activeRayIndex = null;
+  modalMode = null;
 }
 
 function updateOutputs() {
+  renderRayLegend();
   fetch("/api/trace", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -277,8 +335,11 @@ function updateOutputs() {
   })
     .then((res) => res.json())
     .then((data) => {
+      lastTraceResult = data;
       renderMatrixOutput(data);
       renderRayOutput(data);
+      renderVisualization(data);
+      renderRayLegend(data);
     })
     .catch((err) => console.error("Trace error", err));
 }
@@ -293,44 +354,68 @@ function renderMatrixOutput(data) {
     return;
   }
 
+  const totalRow = document.createElement("div");
+  totalRow.className = "matrix-row";
+
+  const label = document.createElement("span");
+  label.className = "matrix-label";
+  label.textContent = "M_total =";
+  totalRow.appendChild(label);
+  totalRow.appendChild(createMatrixElement(data.total_matrix));
+
+  const totalOffset = document.createElement("span");
+  totalOffset.className = "matrix-offset";
+  totalOffset.textContent = `Δx = ${data.total_offset[0].toFixed(3)}, Δθ = ${data.total_offset[1].toFixed(3)}`;
+  totalRow.appendChild(totalOffset);
+
+  matrixOutput.appendChild(totalRow);
+
+  const productRow = document.createElement("div");
+  productRow.className = "matrix-product-line";
+
+  const equals = document.createElement("span");
+  equals.className = "matrix-operator";
+  equals.textContent = "=";
+  productRow.appendChild(equals);
+
   data.matrices.forEach((matrix, index) => {
     const component = componentSequence[index];
     const definition = componentLibrary[component.type];
-    const block = document.createElement("div");
-    block.className = "matrix-block";
 
-    const title = document.createElement("h3");
-    title.textContent = `${definition.label} (Component ${index + 1})`;
-    block.appendChild(title);
+    const term = document.createElement("div");
+    term.className = "matrix-term";
 
-    block.appendChild(createMatrixElement(matrix));
+    const title = document.createElement("p");
+    title.className = "matrix-term__title";
+    title.textContent = `${definition.label}`;
+    term.appendChild(title);
 
-    const params = document.createElement("p");
-    params.className = "component-params";
-    params.textContent = `Parameters: ${Object.entries(component.params)
-      .map(([key, value]) => `${key} = ${value}`)
-      .join(", ")}`;
-    block.appendChild(params);
+    term.appendChild(createMatrixElement(matrix));
 
-    if (data.offsets[index][1] !== 0 || data.offsets[index][0] !== 0) {
-      const offset = document.createElement("p");
-      offset.textContent = `Offsets: Δx = ${data.offsets[index][0].toFixed(3)}, Δθ = ${data.offsets[index][1].toFixed(3)}`;
-      block.appendChild(offset);
+    const paramsText = formatComponentParams(component.params);
+    const offset = data.offsets[index];
+    const hasOffset = Math.abs(offset[0]) > 1e-6 || Math.abs(offset[1]) > 1e-6;
+    const detailParts = [];
+    if (paramsText) detailParts.push(paramsText);
+    if (hasOffset) detailParts.push(`Δx=${offset[0].toFixed(3)}, Δθ=${offset[1].toFixed(3)}`);
+    if (detailParts.length) {
+      const details = document.createElement("p");
+      details.className = "matrix-term__details";
+      details.textContent = detailParts.join(" · ");
+      term.appendChild(details);
     }
 
-    matrixOutput.appendChild(block);
+    productRow.appendChild(term);
+
+    if (index < data.matrices.length - 1) {
+      const operator = document.createElement("span");
+      operator.className = "matrix-operator";
+      operator.textContent = "×";
+      productRow.appendChild(operator);
+    }
   });
 
-  const totalBlock = document.createElement("div");
-  totalBlock.className = "matrix-block";
-  const totalTitle = document.createElement("h3");
-  totalTitle.textContent = "Total System";
-  totalBlock.appendChild(totalTitle);
-  totalBlock.appendChild(createMatrixElement(data.total_matrix));
-  const offset = document.createElement("p");
-  offset.textContent = `Offsets: Δx = ${data.total_offset[0].toFixed(3)}, Δθ = ${data.total_offset[1].toFixed(3)}`;
-  totalBlock.appendChild(offset);
-  matrixOutput.appendChild(totalBlock);
+  matrixOutput.appendChild(productRow);
 }
 
 function createMatrixElement(matrix) {
@@ -370,6 +455,242 @@ function renderRayOutput(data) {
   });
 
   raysOutput.appendChild(table);
+}
+
+const RAY_COLORS = ["#69d2ff", "#ff9f1c", "#ff6f69", "#9b5de5", "#2ec4b6"];
+
+function getRayColor(index) {
+  return RAY_COLORS[index % RAY_COLORS.length];
+}
+
+function renderRayLegend(traceData = lastTraceResult) {
+  if (!rayLegend) return;
+  rayLegend.innerHTML = "";
+
+  rayState.forEach((ray, index) => {
+    const item = document.createElement("div");
+    item.className = "ray-legend__item";
+    item.tabIndex = 0;
+
+    const swatch = document.createElement("span");
+    swatch.className = "ray-legend__swatch";
+    swatch.style.background = getRayColor(index);
+    item.appendChild(swatch);
+
+    const name = document.createElement("span");
+    name.textContent = ray.label;
+    item.appendChild(name);
+
+    const details = document.createElement("span");
+    details.className = "ray-legend__details";
+    const detailParts = [
+      `h₀=${Number(ray.height).toFixed(2)} mm`,
+      `θ₀=${Number(ray.angle).toFixed(2)} mrad`,
+    ];
+    const traced = traceData?.propagated_rays?.[index];
+    if (traced) {
+      detailParts.push(`→ h=${Number(traced.height).toFixed(2)} mm`);
+      detailParts.push(`θ=${Number(traced.angle).toFixed(2)} mrad`);
+    }
+    details.textContent = detailParts.join(" | ");
+    item.appendChild(details);
+
+    item.addEventListener("contextmenu", (evt) => {
+      evt.preventDefault();
+      showRayContextMenu(evt.clientX, evt.clientY, index);
+    });
+
+    item.addEventListener("keydown", (evt) => {
+      if (evt.key === "Enter" || evt.key === " ") {
+        evt.preventDefault();
+        openRayModal(index);
+      }
+    });
+
+    rayLegend.appendChild(item);
+  });
+}
+
+function renderVisualization(data) {
+  if (!visualizationCanvas) return;
+  const ctx = visualizationCanvas.getContext("2d");
+  if (!ctx) return;
+
+  const rect = visualizationCanvas.getBoundingClientRect();
+  const width = rect.width || visualizationCanvas.width || 640;
+  const height = rect.height || visualizationCanvas.height || 260;
+  const dpr = window.devicePixelRatio || 1;
+  visualizationCanvas.width = width * dpr;
+  visualizationCanvas.height = height * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  ctx.clearRect(0, 0, width, height);
+
+  const margin = Math.min(Math.max(width * 0.08, 36), 80);
+  const axisY = height / 2;
+  const layout = computeComponentLayout(width, margin);
+
+  const axisStart = Math.max(10, layout.startX - margin * 0.4);
+  const axisEnd = Math.min(width - 10, layout.endX + margin * 0.4);
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(240, 246, 255, 0.25)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(axisStart, axisY);
+  ctx.lineTo(axisEnd, axisY);
+  ctx.stroke();
+  ctx.restore();
+
+  layout.positions.forEach((entry) => {
+    ctx.save();
+    const gradient = ctx.createLinearGradient(entry.x, 20, entry.x, height - 20);
+    gradient.addColorStop(0, "rgba(105, 210, 255, 0)");
+    gradient.addColorStop(0.5, "rgba(105, 210, 255, 0.7)");
+    gradient.addColorStop(1, "rgba(105, 210, 255, 0)");
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(entry.x, 20);
+    ctx.lineTo(entry.x, height - 20);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.fillStyle = "rgba(240, 246, 255, 0.65)";
+    ctx.font = "12px 'Segoe UI', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(componentLibrary[entry.component.type]?.label ?? "Component", entry.x, height - 6);
+    ctx.restore();
+  });
+
+  const paths = computeRayPaths(data);
+  let maxHeight = 0.5;
+  paths.forEach((path) => {
+    path.states.forEach((state) => {
+      maxHeight = Math.max(maxHeight, Math.abs(state.height));
+    });
+  });
+  const scale = maxHeight === 0 ? 1 : Math.min((height * 0.42) / maxHeight, 90);
+
+  const xPoints = [layout.startX];
+  layout.positions.forEach((entry) => xPoints.push(entry.x));
+  const trailingX = Math.min(width - margin * 0.4, layout.endX + margin * 0.6);
+  xPoints.push(trailingX);
+
+  const mapHeight = (value) => clamp(axisY - value * scale, 16, height - 16);
+
+  paths.forEach((path, index) => {
+    const color = getRayColor(index);
+    const states = path.states;
+    const lastHeight = states[states.length - 1] ? states[states.length - 1].height : states[0]?.height ?? 0;
+    const heights = [...states.map((state) => state.height), lastHeight];
+
+    ctx.save();
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+
+    ctx.strokeStyle = `${color}33`;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(xPoints[0], mapHeight(heights[0]));
+    for (let i = 1; i < xPoints.length; i += 1) {
+      ctx.lineTo(xPoints[i], mapHeight(heights[i] ?? heights[heights.length - 1]));
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.moveTo(xPoints[0], mapHeight(heights[0]));
+    for (let i = 1; i < xPoints.length; i += 1) {
+      ctx.lineTo(xPoints[i], mapHeight(heights[i] ?? heights[heights.length - 1]));
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(xPoints[0], mapHeight(heights[0]), 3.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(xPoints[xPoints.length - 1], mapHeight(heights[heights.length - 1]), 3.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    layout.positions.forEach((entry, posIndex) => {
+      const state = states[posIndex + 1];
+      if (!state) return;
+      ctx.beginPath();
+      ctx.arc(entry.x, mapHeight(state.height), 2.4, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    ctx.restore();
+  });
+}
+
+function computeRayPaths(data) {
+  const matrices = data?.matrices ?? [];
+  const offsets = data?.offsets ?? [];
+  return rayState.map((ray) => {
+    const states = [{ height: ray.height, angle: ray.angle }];
+    let vec = [ray.height, ray.angle];
+    matrices.forEach((matrix, index) => {
+      vec = applyComponentTransform(matrix, offsets[index], vec);
+      states.push({ height: vec[0], angle: vec[1] });
+    });
+    return { states };
+  });
+}
+
+function applyComponentTransform(matrix, offset, vec) {
+  return [
+    matrix[0][0] * vec[0] + matrix[0][1] * vec[1] + (offset?.[0] ?? 0),
+    matrix[1][0] * vec[0] + matrix[1][1] * vec[1] + (offset?.[1] ?? 0),
+  ];
+}
+
+function computeComponentLayout(width, margin) {
+  const startX = Math.max(margin, 24);
+  const endCandidate = Math.max(startX + 80, width - margin);
+  const maxEnd = width - 20;
+  const endX = Math.max(startX + 40, Math.min(endCandidate, maxEnd));
+  const span = Math.max(endX - startX, 40);
+  const weights = componentSequence.map(getComponentWeight);
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+
+  if (!componentSequence.length || totalWeight === 0 || span <= 0) {
+    return { startX, endX, positions: [] };
+  }
+
+  let accumulated = 0;
+  const positions = componentSequence.map((component, index) => {
+    const weight = weights[index];
+    const centerRatio = (accumulated + weight / 2) / totalWeight;
+    accumulated += weight;
+    const x = startX + centerRatio * span;
+    return { x, component, index };
+  });
+
+  return { startX, endX, positions };
+}
+
+function getComponentWeight(component) {
+  if (component.type === "free_space") {
+    const length = Number(component.params.length) || 0;
+    return clamp(length / 50, 0.5, 5);
+  }
+  return 1;
+}
+
+function formatComponentParams(params) {
+  return Object.entries(params)
+    .map(([key, value]) => `${key.replace(/_/g, " ")}=${Number(value).toFixed(2)}`)
+    .join(", ");
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
 }
 
 init();
