@@ -1,55 +1,37 @@
 # Interactive ABCD Matrix Ray Tracer
 
-This project provides a Python-powered web interface for experimenting with ray tracing using ABCD matrices. Users can drag and drop optical components, configure their parameters, and visualise how three configurable test rays propagate through the system.
+A Flask-powered interface for experimenting with paraxial ray tracing using ABCD matrices. Drag optical elements into the rail, tune their parameters, and inspect how reference rays propagate through the system.
 
 ## Features
 
 - Drag-and-drop optical rail with reorderable components.
-- Right-click context menu to configure or remove components.
-- Support for free-space propagation, positive/negative lenses, prisms, gratings, and mirrors.
-- Live ABCD matrix calculation for every component and for the combined system.
-- Three editable test rays with instant propagation results.
+- Configurable library covering free space, lenses, prisms, gratings, and mirrors.
+- Live ABCD matrix products, offsets, and propagated ray summaries.
+- Context menus to adjust or remove components and to edit each reference ray.
+- **Clear All** control that resets the rail and restores the default rays.
 
-## Getting Started
-
-### Requirements
+## Setup
 
 - Python 3.9+
-- [Pipenv](https://pipenv.pypa.io) or pip
+- Install dependencies:
+  ```bash
+  pip install -r requirements.txt
+  ```
 
-### Installation
-
-```bash
-pip install -r requirements.txt
-```
-
-If you prefer Pipenv:
-
-```bash
-pipenv install
-```
-
-### Running the Application
+## Run
 
 ```bash
 flask --app app run
 ```
 
-or with Pipenv:
+The interface is available at <http://127.0.0.1:5000/>.
 
-```bash
-pipenv run flask --app app run
-```
+## Usage Tips
 
-The application will be available at <http://127.0.0.1:5000/>.
-
-### Development Notes
-
-- Drag components from the left toolbox onto the optical rail.
-- Right click a component to access the context menu for configuration or removal.
-- Use the inputs in the Test Rays panel to adjust initial ray height (mm) and angle (mrad).
-- The results panel lists all component matrices, offsets, and the propagated ray values.
+- Drag components from the toolbox into the rail and reorder them as needed.
+- Right-click a component or ray legend entry to configure or remove it.
+- Use **Clear All** to quickly reset the workspace and start a new design.
 
 ## Testing
 
-The project currently has no automated tests. Manual testing can be done by running the application and interacting with the UI.
+Automated tests are not yet included; interact with the running app to validate changes.
