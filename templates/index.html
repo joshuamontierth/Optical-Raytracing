@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ABCD Matrix Ray Tracer</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css" integrity="sha512-oHDEc8XedG0tP3XQYXl8JqgG2nJAKfUZg48zbE8vayFJwGZolYwZIUYaK6FfIWkxFfoDmKf0p+Z7Y1Psv3xw+A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}" />
+  </head>
+  <body>
+    <header class="app-header">
+      <h1>Interactive ABCD Matrix Ray Tracer</h1>
+      <p>
+        Drag optical components from the toolbox into the optical rail below. Right click
+        any component to configure its parameters. Adjust the test rays and review the
+        ABCD matrices and resulting rays at the bottom.
+      </p>
+    </header>
+
+    <main class="app-layout">
+      <section class="toolbox">
+        <h2>Optical Components</h2>
+        <div class="component-list" id="component-library">
+          {% for key, component in component_library.items() %}
+          <div
+            class="component-card"
+            draggable="true"
+            data-type="{{ key }}"
+            data-label="{{ component.label }}"
+          >
+            <h3>{{ component.label }}</h3>
+            <p>{{ component.description }}</p>
+          </div>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="workspace">
+        <h2>Optical Rail</h2>
+        <div id="optical-rail" class="optical-rail" tabindex="0">
+          <p class="rail-placeholder">Drag components here</p>
+        </div>
+
+        <section class="rays-panel">
+          <h2>Test Rays</h2>
+          <div id="ray-controls" class="ray-controls"></div>
+        </section>
+      </section>
+    </main>
+
+    <section class="results-panel">
+      <h2>Results</h2>
+      <div class="results-columns">
+        <div class="matrices" id="matrix-output"></div>
+        <div class="rays-output" id="rays-output"></div>
+      </div>
+    </section>
+
+    <div id="context-menu" class="context-menu hidden">
+      <button type="button" data-action="configure">Configure</button>
+      <button type="button" data-action="remove">Remove</button>
+    </div>
+
+    <div id="modal-backdrop" class="modal-backdrop hidden">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal-header">
+          <h3 id="modal-title">Configure Component</h3>
+          <button type="button" id="modal-close" aria-label="Close">&times;</button>
+        </div>
+        <form id="modal-form" class="modal-form"></form>
+        <div class="modal-actions">
+          <button type="button" id="modal-cancel">Cancel</button>
+          <button type="submit" form="modal-form" id="modal-save">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <template id="ray-control-template">
+      <div class="ray-control" data-ray-index="">
+        <h3></h3>
+        <label>
+          Height (mm)
+          <input type="number" name="height" step="0.1" />
+        </label>
+        <label>
+          Angle (mrad)
+          <input type="number" name="angle" step="0.1" />
+        </label>
+      </div>
+    </template>
+
+    <template id="component-template">
+      <div class="rail-component" data-id="">
+        <span class="rail-component__label"></span>
+      </div>
+    </template>
+
+    <script>
+      window.APP_DATA = {
+        componentLibrary: {{ component_library|tojson }},
+      };
+    </script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  </body>
+</html>
