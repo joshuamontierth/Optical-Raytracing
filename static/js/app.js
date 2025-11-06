@@ -14,6 +14,8 @@ const visualizationCanvas = document.getElementById("ray-visualization");
 const rayLegend = document.getElementById("ray-legend");
 const clearAllButton = document.getElementById("clear-all");
 
+const DEFAULT_FREE_SPACE_LENGTH = 5;
+
 let componentSequence = [];
 let activeContextTarget = null;
 let activeModalComponentId = null;
@@ -29,11 +31,22 @@ const defaultRays = [
 
 const rayState = defaultRays.map((ray) => ({ ...ray }));
 
+function ensureDefaultPropagationSegment() {
+  if (componentSequence.length) {
+    return false;
+  }
+  addComponentToRail("free_space", { length: DEFAULT_FREE_SPACE_LENGTH });
+  return true;
+}
+
 function init() {
   bindLibraryDrag();
   setupRailDropTarget();
+  const insertedDefault = ensureDefaultPropagationSegment();
   renderRayLegend();
-  updateOutputs();
+  if (!insertedDefault) {
+    updateOutputs();
+  }
   if (clearAllButton) {
     clearAllButton.addEventListener("click", handleClearAll);
   }
@@ -67,11 +80,14 @@ function handleClearAll() {
   hideContextMenu();
   hideRayContextMenu();
   componentSequence = [];
-  opticalRail.querySelectorAll(".rail-component").forEach((element) => element.remove());
+  opticalRail
+    .querySelectorAll(".rail-component")
+    .forEach((element) => element.remove());
   resetRaysToDefault();
   refreshRailPlaceholder();
   lastTraceResult = null;
-  updateOutputs();
+  renderRayLegend();
+  ensureDefaultPropagationSegment();
 }
 
 function bindLibraryDrag() {
@@ -166,14 +182,19 @@ rayContextMenu.addEventListener("click", (evt) => {
   hideRayContextMenu();
 });
 
-function addComponentToRail(type) {
+function addComponentToRail(type, initialParams = null, options = {}) {
+  const { skipUpdate = false } = options;
   const definition = componentLibrary[type];
   if (!definition) return;
 
   const id = crypto.randomUUID();
   const params = {};
   Object.entries(definition.parameters).forEach(([name, config]) => {
-    params[name] = config.default ?? 0;
+    if (initialParams && Object.prototype.hasOwnProperty.call(initialParams, name)) {
+      params[name] = initialParams[name];
+    } else {
+      params[name] = config.default ?? 0;
+    }
   });
 
   const component = { id, type, params };
@@ -190,7 +211,10 @@ function addComponentToRail(type) {
 
   opticalRail.appendChild(fragment);
   refreshRailPlaceholder();
-  updateOutputs();
+  if (!skipUpdate) {
+    updateOutputs();
+  }
+  return component;
 }
 
 function enableComponentReorder(element) {
@@ -663,18 +687,24 @@ function renderVisualization(data) {
   });
   const scale = maxHeight === 0 ? 1 : Math.min((height * 0.42) / maxHeight, 90);
 
+  const shouldExtendPath = shouldExtendPastRail();
   const xPoints = [layout.startX];
   layout.positions.forEach((entry) => xPoints.push(entry.x));
-  const trailingX = Math.min(width - margin * 0.4, layout.endX + margin * 0.6);
-  xPoints.push(trailingX);
+  if (shouldExtendPath) {
+    const trailingX = Math.min(width - margin * 0.4, layout.endX + margin * 0.6);
+    xPoints.push(trailingX);
+  }
 
   const mapHeight = (value) => clamp(axisY - value * scale, 16, height - 16);
 
   paths.forEach((path, index) => {
     const color = getRayColor(index);
     const states = path.states;
-    const lastHeight = states[states.length - 1] ? states[states.length - 1].height : states[0]?.height ?? 0;
-    const heights = [...states.map((state) => state.height), lastHeight];
+    const heights = states.map((state) => state.height);
+    const lastHeight = heights[heights.length - 1] ?? heights[0] ?? 0;
+    while (heights.length < xPoints.length) {
+      heights.push(lastHeight);
+    }
 
     ctx.save();
     ctx.lineJoin = "round";
@@ -738,6 +768,30 @@ function applyComponentTransform(matrix, offset, vec) {
     matrix[0][0] * vec[0] + matrix[0][1] * vec[1] + (offset?.[0] ?? 0),
     matrix[1][0] * vec[0] + matrix[1][1] * vec[1] + (offset?.[1] ?? 0),
   ];
+}
+
+function shouldExtendPastRail() {
+  return getTrailingNonPropagationRunLength() >= 2;
+}
+
+function getTrailingNonPropagationRunLength() {
+  let count = 0;
+  for (let index = componentSequence.length - 1; index >= 0; index -= 1) {
+    const component = componentSequence[index];
+    if (!component) {
+      continue;
+    }
+    if (component.type !== "free_space") {
+      count += 1;
+      continue;
+    }
+    const length = Number(component.params?.length) || 0;
+    if (length <= 0) {
+      continue;
+    }
+    break;
+  }
+  return count;
 }
 
 function computeComponentLayout(width, margin) {
